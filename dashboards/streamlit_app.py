@@ -43,25 +43,25 @@ st.set_page_config(
 # ============================================================================
 
 SOC_COLORS = {
-    'background': '#0F172A',   # slate-900
-    'panel': '#111827',        # gray-900
-    'surface': '#1F2933',      # gray-800
-    'border': '#334155',       # slate-700
-    'text_primary': '#E5E7EB', # gray-200
-    'text_secondary': '#9CA3AF',
+    'background': '#0E1117',   # charcoal
+    'panel': '#0F172A',        # deep slate
+    'surface': '#111827',      # panel surface
+    'border': '#6B7280',       # slate blue-gray
+    'text_primary': '#E6E8EB', # soft off-white
+    'text_secondary': '#9AA0A6',
     'text_muted': '#6B7280',
-    'critical': '#DC2626',     # red-600
-    'high': '#DC2626',         # style.md high risk red-600
-    'medium': '#F59E0B',       # amber-500
-    'low': '#10B981',          # emerald-500
-    'info': '#3B82F6'          # blue-500
+    'critical': '#C44536',     # deep crimson (risk)
+    'high': '#C44536',         # keep risk red for high/critical
+    'medium': '#E0B15C',       # desaturated amber (demographic)
+    'low': '#6C7FF2',          # cool indigo (biometric / low risk tone)
+    'info': '#4FB6B2'          # muted teal (enrollment / neutral info)
 }
 
 RISK_COLORS = {
-    'CRITICAL': '#DC2626',
-    'HIGH': '#DC2626',
-    'MEDIUM': '#F59E0B',
-    'LOW': '#10B981'
+    'CRITICAL': '#C44536',
+    'HIGH': '#C44536',
+    'MEDIUM': '#E0B15C',
+    'LOW': '#6C7FF2'
 }
 
 # Custom CSS for SOC theme
@@ -345,6 +345,516 @@ def check_data_exists():
         st.rerun()
     
     return True
+
+
+# ============================================================================
+# Page: Data Foundations (Page 1)
+# ============================================================================
+
+def page_data_foundations():
+    """Page 1 — Data Foundations: schemas, row counts, missingness, freshness."""
+
+    st.title("📂 Data Foundations")
+    st.caption("Explain what data exists, what doesn't, and its basic health — no derived metrics.")
+
+    # Load all datasets
+    risk_df = load_risk_data()
+    ioc_df = load_ioc_data()
+    alerts_df = load_alerts_data()
+    daily_df = load_daily_data()
+    state_df = load_state_data()
+    district_df = load_district_data()
+
+    # Row counts per table
+    row_counts = pd.DataFrame([
+        {"Dataset": "risk_scores.csv", "Rows": len(risk_df) if risk_df is not None else 0},
+        {"Dataset": "ioc_catalogue.csv", "Rows": len(ioc_df)},
+        {"Dataset": "alerts.csv", "Rows": len(alerts_df)},
+        {"Dataset": "daily_summary.csv", "Rows": len(daily_df)},
+        {"Dataset": "state_summary.csv", "Rows": len(state_df)},
+        {"Dataset": "district_summary.csv", "Rows": len(district_df)}
+    ])
+
+    st.markdown("**Row counts by dataset**")
+    zebra_dataframe(row_counts, hide_index=True, use_container_width=True)
+    st.caption("Tables kept only for comparison (>=3 datasets). No derived metrics on this page.")
+
+    st.divider()
+
+    # Dataset schema (using risk_scores as the unified schema proxy)
+    if risk_df is not None:
+        schema_df = pd.DataFrame({
+            "Column": risk_df.columns,
+            "Dtype": [str(t) for t in risk_df.dtypes],
+        })
+        st.markdown("**Schema (risk_scores.csv as canonical PIN-level table)**")
+        zebra_dataframe(schema_df, hide_index=True, use_container_width=True)
+        st.caption("Schema table retained for auditability; use it to map variables before charts.")
+    else:
+        st.info("risk_scores.csv not found. Run the pipeline to populate data.")
+
+    st.divider()
+
+    # Missing value summary
+    if risk_df is not None and not risk_df.empty:
+        missing_df = pd.DataFrame({
+            "Column": risk_df.columns,
+            "Non-null": risk_df.notnull().sum(),
+            "% Missing": (risk_df.isnull().mean() * 100).round(2)
+        })
+        st.markdown("**Missing value summary (risk_scores.csv)**")
+        zebra_dataframe(missing_df.sort_values("% Missing", ascending=False), hide_index=True, use_container_width=True)
+        st.caption("Missingness shown to frame reliability of downstream visuals; no derivations applied here.")
+    else:
+        st.info("Missing summary unavailable (risk_scores.csv empty or missing).")
+
+    st.divider()
+
+    # Data freshness / coverage
+    if daily_df is not None and not daily_df.empty:
+        min_date, max_date = daily_df['date'].min(), daily_df['date'].max()
+        st.markdown("**Data freshness & coverage**")
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            st.metric("First date", min_date.strftime('%Y-%m-%d'))
+        with c2:
+            st.metric("Latest date", max_date.strftime('%Y-%m-%d'))
+        with c3:
+            st.metric("Active days", len(daily_df))
+        st.caption("Counts only — no derived metrics on this page (per redesign.md rules).")
+    else:
+        st.info("Daily coverage unavailable (daily_summary.csv missing).")
+
+
+# ============================================================================
+# Page: Variable-Level Statistics (Page 2)
+# ============================================================================
+
+def page_variable_stats():
+    """Page 2 — Variable-Level Statistics (most important)."""
+
+    st.title("📊 Variable-Level Statistics")
+    st.caption("Show raw distributions, definitions, dtypes, ranges, and missingness before any aggregation.")
+
+    risk_df = load_risk_data()
+    if risk_df is None or risk_df.empty:
+        st.error("risk_scores.csv missing. Run the pipeline first.")
+        return
+
+    # Variable selector
+    variable = st.selectbox("Choose variable", options=sorted(risk_df.columns.tolist()))
+
+    series = risk_df[variable]
+    dtype = str(series.dtype)
+    missing_pct = series.isnull().mean() * 100
+
+    st.markdown(f"**Definition:** {variable} (see schema in Data Foundations)")
+    st.markdown(f"**Data type:** {dtype}")
+    st.markdown(f"**% Missing:** {missing_pct:.2f}%")
+
+    if pd.api.types.is_numeric_dtype(series):
+        desc = series.describe(percentiles=[0.25, 0.5, 0.75]).rename({
+            '25%': 'P25', '50%': 'Median', '75%': 'P75'
+        })
+        c1, c2, c3, c4 = st.columns(4)
+        with c1:
+            st.metric("Mean", f"{desc['mean']:.2f}")
+        with c2:
+            st.metric("Median", f"{desc['Median']:.2f}")
+        with c3:
+            st.metric("Std Dev", f"{desc['std']:.2f}")
+        with c4:
+            st.metric("P25 / P75", f"{desc['P25']:.2f} / {desc['P75']:.2f}")
+
+        fig = px.histogram(risk_df, x=variable, nbins=40, marginal=None, color_discrete_sequence=[SOC_COLORS['info']])
+        fig.update_layout(
+            height=340,
+            paper_bgcolor='rgba(0,0,0,0)',
+            plot_bgcolor='rgba(0,0,0,0)',
+            font=dict(color=SOC_COLORS['text_primary']),
+            bargap=0.05
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+        with st.expander("How this metric is computed", expanded=False):
+            st.markdown("Raw numeric column; no derived formula unless specified in methodology.")
+            st.markdown("Inputs: direct from dataset column.")
+            st.markdown("Limitations: Outliers can skew mean; refer to median/P25/P75 for robustness.")
+        with st.expander("Why this matters for fraud detection", expanded=False):
+            st.markdown("Distributions reveal abnormal density spikes that can indicate manipulation.")
+            st.markdown("This does NOT prove fraud; anomalies require contextual verification.")
+    else:
+        freq = series.fillna("<missing>").value_counts()
+        top_df = freq.head(10).reset_index()
+        top_df.columns = ["Category", "Count"]
+        top_df["Percent"] = (top_df["Count"] / len(series) * 100).round(1)
+        st.markdown("**Categorical frequency (top 10)**")
+        zebra_dataframe(top_df, hide_index=True, use_container_width=True)
+
+        fig = px.bar(top_df, x="Category", y="Count", color_discrete_sequence=[SOC_COLORS['info']])
+        fig.update_layout(
+            height=340,
+            paper_bgcolor='rgba(0,0,0,0)',
+            plot_bgcolor='rgba(0,0,0,0)',
+            font=dict(color=SOC_COLORS['text_primary']),
+            xaxis_tickangle=-30
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+        with st.expander("How this metric is computed", expanded=False):
+            st.markdown("Frequency counts of categories (including <missing> bucket).")
+            st.markdown("Inputs: raw categorical values from dataset.")
+            st.markdown("Limitations: Long tails may truncate beyond top 10 shown here.")
+        with st.expander("Why this matters for fraud detection", expanded=False):
+            st.markdown("Category skew highlights concentrations that may signal coordinated edits.")
+            st.markdown("Does NOT prove fraud; verify against operational campaigns.")
+
+    st.caption("No cross-variable aggregation shown here (per redesign.md). Visual-first with inline formulas and caveats.")
+
+
+# ============================================================================
+# Page: Derived Metrics & Calculations (Page 3)
+# ============================================================================
+
+def page_derived_metrics():
+    """Page 3 — Derived metrics with formulas, inputs, assumptions, limitations."""
+
+    st.title("🧮 Derived Metrics & Calculations")
+    st.caption("Deterministic formulas only. Every metric lists inputs, assumptions, and limitations.")
+
+    metrics = [
+        {
+            "name": "Enrollment Velocity",
+            "formula": "enrollment_velocity = recent_7d_enrollments / median_30d_enrollments",
+            "inputs": ["total_enrollments", "rolling 7d", "median 30d"],
+            "assumptions": "Seasonality mild over 30 days; medians robust to spikes.",
+            "limitations": "If coverage is sparse (<10 days), velocity may be unstable."
+        },
+        {
+            "name": "Update Velocity",
+            "formula": "update_velocity = recent_7d_demo_updates / median_30d_demo_updates",
+            "inputs": ["total_demo_updates", "rolling 7d", "median 30d"],
+            "assumptions": "Demographic updates follow gradual trends unless manipulated.",
+            "limitations": "Bulk legitimate campaigns (e.g., address drives) can elevate velocity."
+        },
+        {
+            "name": "Biometric Recapture Ratio",
+            "formula": "bio_recapture_ratio = total_bio_updates / total_enrollments",
+            "inputs": ["total_bio_updates", "total_enrollments"],
+            "assumptions": "Re-captures above 30% are atypical.",
+            "limitations": "Hardware refresh programs can legitimately raise recaptures temporarily."
+        },
+        {
+            "name": "Child Ratio Z-score",
+            "formula": "child_ratio_z = zscore(age_0_5 / total_enrollments)",
+            "inputs": ["age_0_5", "total_enrollments"],
+            "assumptions": "National distribution is stable; Z>3 denotes anomaly.",
+            "limitations": "Districts with genuinely young populations may appear anomalous."
+        },
+        {
+            "name": "Risk Score (0-10)",
+            "formula": "risk = (0.30*enroll_vel + 0.25*update_vel + 0.20*demo_anom + 0.15*geo_outlier + 0.10*time_spike) * 10",
+            "inputs": ["enrollment_velocity", "update_velocity", "demographic_anomaly", "geographic_outlier", "temporal_spike"],
+            "assumptions": "Weights locked per specification; percentile caps handle outliers.",
+            "limitations": "Does not prove fraud; highlights statistical outliers only."
+        },
+    ]
+
+    for m in metrics:
+        with st.expander(m["name"], expanded=False):
+            st.markdown(f"**Formula:** {m['formula']}")
+            st.markdown(f"**Required inputs:** {', '.join(m['inputs'])}")
+            st.markdown(f"**Assumptions:** {m['assumptions']}")
+            st.markdown(f"**Limitations:** {m['limitations']}")
+            st.markdown("**Why this matters:** Highlights where volume/velocity anomalies can signal coordinated fraud. Does NOT prove fraud; requires contextual validation.")
+
+
+# ============================================================================
+# Page: Local / Regional Insights (Page 4)
+# ============================================================================
+
+def page_local_regional():
+    """Page 4 — Local/Regional analysis: state/district summaries and time trends."""
+
+    st.title("🗺️ Local / Regional Insights")
+    st.caption("Per-state and per-district behavior plus time trends. Small multiples preferred.")
+
+    risk_df = load_risk_data()
+    state_df = load_state_data()
+    district_df = load_district_data()
+    daily_df = load_daily_data()
+
+    # Enrollment vs Update correlation (visual-first)
+    if risk_df is not None and not risk_df.empty:
+        st.markdown("**Enrollment vs Update Correlation (velocity)**")
+        corr_df = risk_df.dropna(subset=['enrollment_velocity', 'update_velocity'])
+        fig_corr = px.scatter(
+            corr_df,
+            x='enrollment_velocity',
+            y='update_velocity',
+            color='risk_level',
+            color_discrete_map=RISK_COLORS,
+            hover_data=['pincode', 'district', 'state'],
+            labels={'enrollment_velocity': 'Enrollment Velocity', 'update_velocity': 'Update Velocity'}
+        )
+        fig_corr.update_layout(
+            height=360,
+            paper_bgcolor='rgba(0,0,0,0)',
+            plot_bgcolor='rgba(0,0,0,0)',
+            font=dict(color=SOC_COLORS['text_primary']),
+            legend_title_text='Risk Level'
+        )
+        fig_corr.update_xaxes(showgrid=True, gridcolor=SOC_COLORS['border'])
+        fig_corr.update_yaxes(showgrid=True, gridcolor=SOC_COLORS['border'])
+        st.plotly_chart(fig_corr, use_container_width=True)
+        with st.expander("How this metric is computed", expanded=False):
+            st.markdown("Velocity = recent 7d volume ÷ 30d median (per feature engineering).")
+            st.markdown("Inputs: enrollment_velocity, update_velocity from risk_scores.csv.")
+            st.markdown("Limitations: Sparse coverage (<10 days) can inflate ratios.")
+        with st.expander("Why this matters for fraud detection", expanded=False):
+            st.markdown("Correlated high velocities across enrollment and updates suggest coordinated manipulation.")
+            st.markdown("Does NOT prove fraud; correlate with campaign calendars and outages.")
+
+    # State summary
+    if state_df is not None and not state_df.empty:
+        st.markdown("**State summary (avg risk, PINs, enrollments)**")
+        view = state_df.copy()
+        if 'avg_risk_score' in view.columns:
+            view = view.rename(columns={'avg_risk_score': 'Avg Risk', 'total_pins': 'PINs'})
+        if 'total_enrollments' in view.columns:
+            cols = [c for c in ['state', 'Avg Risk', 'PINs', 'total_enrollments'] if c in view.columns]
+            view = view[cols]
+        zebra_dataframe(view.sort_values(view.columns[1], ascending=False), hide_index=True, use_container_width=True)
+        st.caption("Visual-first rule: table kept for ranking comparison across states (>=3 columns).")
+
+    st.divider()
+
+    # District comparison
+    if district_df is not None and not district_df.empty:
+        st.markdown("**District comparison (top/bottom risk)**")
+        if 'avg_risk_score' in district_df.columns:
+            top = district_df.nlargest(10, 'avg_risk_score')
+            bottom = district_df.nsmallest(10, 'avg_risk_score')
+            c1, c2 = st.columns(2)
+            with c1:
+                st.markdown("Top 10 districts by risk")
+                zebra_dataframe(top[['state', 'district', 'avg_risk_score']], hide_index=True, use_container_width=True)
+            with c2:
+                st.markdown("Bottom 10 districts by risk")
+                zebra_dataframe(bottom[['state', 'district', 'avg_risk_score']], hide_index=True, use_container_width=True)
+            st.caption("Tables retained for ranked comparison (>=3 columns).")
+        else:
+            zebra_dataframe(district_df.head(20), hide_index=True, use_container_width=True)
+
+    st.divider()
+
+    # Anomaly monitor (child/update/bio z-scores)
+    if risk_df is not None and not risk_df.empty:
+        st.markdown("**Demographic & Biometric Anomaly Monitor (Z > 3)**")
+        monitor_cols = [c for c in ['pincode', 'district', 'state', 'child_ratio_zscore', 'update_ratio_zscore', 'bio_recapture_ratio_zscore'] if c in risk_df.columns]
+        flagged = risk_df[monitor_cols].copy()
+        if not flagged.empty and any(col.endswith('zscore') for col in monitor_cols):
+            def flag_val(row):
+                vals = [abs(row[c]) for c in monitor_cols if c.endswith('zscore')]
+                return max(vals) if vals else 0
+            flagged['max_abs_z'] = flagged.apply(flag_val, axis=1)
+            flagged = flagged[flagged['max_abs_z'] > 3].sort_values('max_abs_z', ascending=False).head(30)
+            zebra_dataframe(flagged, hide_index=True, use_container_width=True)
+            with st.expander("How this monitor is computed", expanded=False):
+                st.markdown("Z-scores computed across all PINs; |Z|>3 flagged as statistical anomalies.")
+                st.markdown("Inputs: child_ratio_zscore, update_ratio_zscore, bio_recapture_ratio_zscore.")
+                st.markdown("Limitations: Genuine demographic skews (e.g., very young districts) may appear as anomalies.")
+            with st.expander("Why this matters for fraud detection", expanded=False):
+                st.markdown("Extreme Z-scores highlight PINs whose demographic or biometric behavior diverges sharply from norms.")
+                st.markdown("Does NOT prove fraud; must be validated against local context.")
+
+    st.divider()
+
+    # Time-based trends (small multiples)
+    if daily_df is not None and not daily_df.empty:
+        st.markdown("**Time trends (daily totals)**")
+        fig = make_subplots(rows=3, cols=1, shared_xaxes=True, vertical_spacing=0.05,
+                            subplot_titles=('Enrollments', 'Demographic Updates', 'Biometric Updates'))
+
+        fig.add_trace(go.Scatter(x=daily_df['date'], y=daily_df['total_enrollments'],
+                                 mode='lines', name='Enrollments', line=dict(color=SOC_COLORS['info'])), row=1, col=1)
+        fig.add_trace(go.Scatter(x=daily_df['date'], y=daily_df['total_demo_updates'],
+                                 mode='lines', name='Demo Updates', line=dict(color=SOC_COLORS['medium'])), row=2, col=1)
+        fig.add_trace(go.Scatter(x=daily_df['date'], y=daily_df['total_bio_updates'],
+                                 mode='lines', name='Bio Updates', line=dict(color=SOC_COLORS['critical'])), row=3, col=1)
+
+        fig.update_layout(
+            height=520,
+            paper_bgcolor='rgba(0,0,0,0)',
+            plot_bgcolor='rgba(0,0,0,0)',
+            font=dict(color=SOC_COLORS['text_primary']),
+            showlegend=False
+        )
+        fig.update_xaxes(showgrid=True, gridcolor=SOC_COLORS['border'])
+        fig.update_yaxes(showgrid=True, gridcolor=SOC_COLORS['border'])
+        st.plotly_chart(fig, use_container_width=True)
+
+        st.markdown("**Interpretation**")
+        st.markdown("- Patterns: Look for synchronized lifts across the three panels; isolated spikes hint at channel-specific issues.\n- Usefulness: Separates enrollment surges from demographic edits and biometric recaptures to isolate cause.\n- Does NOT prove: A spike alone is not fraud; correlate with campaigns or outages before action.")
+    else:
+        st.info("Daily trend data unavailable.")
+
+
+# ============================================================================
+# Page: National Statistics (Page 5)
+# ============================================================================
+
+def page_national_stats():
+    """Page 5 — National-level statistics with footnotes and variance warnings."""
+
+    st.title("🏛️ National Statistics")
+    st.caption("Only after foundations + local context. Includes footnotes and variance warnings.")
+
+    risk_df = load_risk_data()
+    state_df = load_state_data()
+    alerts_df = load_alerts_data()
+    daily_df = load_daily_data()
+
+    if risk_df is None or risk_df.empty:
+        st.error("risk_scores.csv missing. Run pipeline first.")
+        return
+
+    # National aggregates (visual-first stats strip + executive KPIs)
+    c1, c2, c3, c4, c5, c6 = st.columns(6)
+    mean_risk = risk_df['risk_score'].mean()
+    med_risk = risk_df['risk_score'].median()
+    p90_risk = risk_df['risk_score'].quantile(0.90)
+    total_pins = len(risk_df)
+    critical_alerts = len(alerts_df[alerts_df['risk_level'] == 'CRITICAL']) if alerts_df is not None and not alerts_df.empty and 'risk_level' in alerts_df.columns else 0
+    high_risk_enroll = 0
+    if 'risk_level' in risk_df.columns and 'total_enrollments' in risk_df.columns:
+        high_risk_enroll = risk_df[risk_df['risk_level'].isin(['CRITICAL', 'HIGH'])]['total_enrollments'].sum()
+    financial_impact = high_risk_enroll * 50  # ₹50 proxy per enrollment
+
+    with c1:
+        st.metric("Avg Risk", f"{mean_risk:.2f}")
+    with c2:
+        st.metric("Median", f"{med_risk:.2f}")
+    with c3:
+        st.metric("P90", f"{p90_risk:.2f}")
+    with c4:
+        st.metric("Total PINs", f"{total_pins:,}")
+    with c5:
+        st.metric("Critical Alerts", f"{critical_alerts:,}")
+    with c6:
+        st.metric("Est. Impact (₹)", f"{financial_impact:,.0f}")
+
+    st.caption("Footnote: Derived directly from risk_scores.csv distributions established on Page 2.")
+
+    # National distribution visualization
+    fig = px.histogram(risk_df, x='risk_score', nbins=40, color_discrete_sequence=[SOC_COLORS['critical']])
+    fig.update_layout(
+        height=340,
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
+        font=dict(color=SOC_COLORS['text_primary']),
+        bargap=0.05
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
+    with st.expander("How these aggregates are computed", expanded=False):
+        st.markdown("Aggregates are simple descriptive stats on risk_score (mean/median/P90). No smoothing or weighting.")
+        st.markdown("Inputs: risk_scores.csv → risk_score column only.")
+        st.markdown("Limitations: Sensitive to coverage; P90 highlights tail but not its causes.")
+    with st.expander("Why this matters for fraud detection", expanded=False):
+        st.markdown("National distribution shows tail heaviness; a fat upper tail signals concentrated anomalies.")
+        st.markdown("Does NOT prove fraud: requires tracing back to variable-level anomalies (Page 2) and locality (Page 4).")
+
+    st.divider()
+
+    # Threat timeline (alerts per day)
+    if alerts_df is not None and not alerts_df.empty and 'date_detected' in alerts_df.columns:
+        alerts_df['date_detected'] = pd.to_datetime(alerts_df['date_detected'], errors='coerce')
+        timeline = alerts_df.dropna(subset=['date_detected']).groupby('date_detected').size().reset_index(name='alerts')
+        fig_t = px.line(timeline, x='date_detected', y='alerts', markers=True, color_discrete_sequence=[SOC_COLORS['critical']])
+        fig_t.update_layout(
+            height=320,
+            paper_bgcolor='rgba(0,0,0,0)',
+            plot_bgcolor='rgba(0,0,0,0)',
+            font=dict(color=SOC_COLORS['text_primary'])
+        )
+        fig_t.update_xaxes(showgrid=True, gridcolor=SOC_COLORS['border'])
+        fig_t.update_yaxes(showgrid=True, gridcolor=SOC_COLORS['border'])
+        st.plotly_chart(fig_t, use_container_width=True)
+        with st.expander("How this timeline is computed", expanded=False):
+            st.markdown("Counts alerts by date_detected. No smoothing; raw daily counts.")
+            st.markdown("Inputs: alerts.csv date_detected column.")
+            st.markdown("Limitations: Dependent on alert generation cadence; gaps reflect missing alerts, not zero risk.")
+        with st.expander("Why this matters for fraud detection", expanded=False):
+            st.markdown("Spikes in alert counts show temporal clustering of anomalies requiring surge response.")
+            st.markdown("Does NOT prove fraud; investigate underlying IOCs for context.")
+
+    st.divider()
+
+    # Regional contribution to totals
+    if state_df is not None and not state_df.empty and 'total_enrollments' in state_df.columns:
+        st.markdown("**Regional contribution to enrollments**")
+        state_df = state_df.sort_values('total_enrollments', ascending=False)
+        fig = px.bar(state_df.head(15), x='state', y='total_enrollments', color_discrete_sequence=[SOC_COLORS['info']])
+        fig.update_layout(
+            height=380,
+            paper_bgcolor='rgba(0,0,0,0)',
+            plot_bgcolor='rgba(0,0,0,0)',
+            font=dict(color=SOC_COLORS['text_primary']),
+            xaxis_tickangle=-30
+        )
+        st.plotly_chart(fig, use_container_width=True)
+        st.caption("Warning: Aggregation hides variance — cross-check Page 4 state/district spreads.")
+
+    # Top 5 high-risk districts (ranked table for comparison)
+    if district_df := load_district_data():
+        if not district_df.empty and 'avg_risk_score' in district_df.columns:
+            top5 = district_df.nlargest(5, 'avg_risk_score')[['state', 'district', 'avg_risk_score']]
+            st.markdown("**Top 5 High-Risk Districts**")
+            zebra_dataframe(top5, hide_index=True, use_container_width=True)
+            st.caption("Table retained for ranking comparison (>=3 columns); ties back to district-level distributions.")
+
+
+# ============================================================================
+# Page: Interpretation & Use-Cases (Page 6)
+# ============================================================================
+
+def page_interpretation():
+    """Page 6 — Explain insights, why they matter, and what they do NOT prove."""
+
+    st.title("🧭 Interpretation & Use-Cases")
+    st.caption("Explain usefulness without exaggeration. No policy claims unless data-backed.")
+
+    insights = [
+        {
+            "title": "High biometric recapture ratios",
+            "indicates": "Possible coercion or operator-driven re-enrollment",
+            "why_care": "Biometric churn erodes identity integrity and signals manipulation",
+            "action": "Audit centers with >30% recapture; cross-check operator logs",
+            "not_prove": "Does not prove fraud — could be device refresh campaigns"
+        },
+        {
+            "title": "Demographic surge velocity >3x",
+            "indicates": "Bulk demographic edits potentially masking identity swaps",
+            "why_care": "Rapid edits can rewrite KYC attributes at scale",
+            "action": "Pause edits, require secondary verification for affected PINs",
+            "not_prove": "Could reflect legitimate mass update drives (address campaigns)"
+        },
+        {
+            "title": "Coordinated PIN spikes (CPS)",
+            "indicates": "Synchronized enrollment + update + bio spikes",
+            "why_care": "Suggests organized fraud ring leveraging multiple channels",
+            "action": "Temporarily flag affected PINs; investigate operators serving them",
+            "not_prove": "Might coincide with genuine outreach events if poorly scheduled"
+        }
+    ]
+
+    for ins in insights:
+        with st.expander(ins["title"], expanded=False):
+            st.markdown(f"**Indicates:** {ins['indicates']}")
+            st.markdown(f"**Why analysts care:** {ins['why_care']}")
+            st.markdown(f"**Possible action:** {ins['action']}")
+            st.markdown(f"**What this does NOT prove:** {ins['not_prove']}")
 
 
 # ============================================================================
@@ -1529,15 +2039,14 @@ def main():
     
     st.sidebar.divider()
     
-    # Navigation
+    # Navigation (redesign: teaching-first, micro → macro)
     pages = {
-        "Overview": page_overview,
-        "Threat Map": page_threat_map,
-        "PIN Risk Explorer": page_pin_explorer,
-        "Temporal Analysis": page_temporal,
-        "IOC Catalogue": page_ioc_catalogue,
-        "Data Health": page_data_health,
-        "Methodology": page_methodology
+        "Data Foundations": page_data_foundations,
+        "Variable-Level Statistics": page_variable_stats,
+        "Derived Metrics & Calculations": page_derived_metrics,
+        "Local / Regional Insights": page_local_regional,
+        "National Statistics": page_national_stats,
+        "Interpretation & Use-Cases": page_interpretation
     }
     
     selection = st.sidebar.radio("Navigation", list(pages.keys()), label_visibility="collapsed")
