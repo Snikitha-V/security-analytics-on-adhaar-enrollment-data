@@ -1,273 +1,335 @@
 # A-SOC: Aadhaar Security Operations Center
+## Fraud Detection and Threat Intelligence System
 
-## Threat Intelligence System for Aadhaar Fraud Detection
-
-<p align="center">
-  <img src="https://img.shields.io/badge/Python-3.10+-blue.svg" alt="Python Version">
-  <img src="https://img.shields.io/badge/Status-Production-green.svg" alt="Status">
-  <img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License">
-  <img src="https://img.shields.io/badge/Reproducible-Seed%2042-purple.svg" alt="Deterministic">
-</p>
+A comprehensive machine learning and rule-based system for detecting fraudulent Aadhaar enrollment patterns, demographic manipulation, and biometric anomalies at the PIN (pincode) level across India.
 
 ---
 
-## 🎯 Overview
+## 🎯 Project Overview
 
-A-SOC is a **SOC-style Threat Intelligence System** for detecting potential Aadhaar fraud patterns using only official UIDAI enrollment, demographic update, and biometric update data.
+**A-SOC** analyzes ~5 million Aadhaar records across three data streams:
+- **Enrollment Data**: New Aadhaar registrations by age group
+- **Demographic Updates**: Changes to personal information
+- **Biometric Recapture**: Fingerprint/iris updates and corrections
 
-This is **risk-based anomaly detection** for investigative prioritization - not a fraud confirmation system.
+The system identifies fraud patterns through:
+1. **Statistical Anomalies**: Z-score based outlier detection
+2. **Velocity Analysis**: Activity relative to national medians
+3. **Geographic Profiling**: District-level deviation scoring
+4. **Temporal Detection**: Sudden activity spikes
+5. **Rule-Based IOCs**: 8 fraud indicator patterns
 
-### Key Features
+---
 
-- 🔍 **PIN-level Risk Scoring**: Analyzes every PIN code for fraud indicators
-- 📊 **IOC Detection**: Identifies 5 distinct fraud patterns automatically
-- 🗺️ **Geographic Analysis**: State and district-level threat mapping
-- ⏱️ **Temporal Analysis**: Detects enrollment/update spikes over time
-- 📋 **Actionable Alerts**: Prioritized investigation queue with recommendations
-- 🔒 **Fully Reproducible**: Deterministic output with fixed random seed
+## 📊 System Architecture
+
+```
+Raw Data (3 sources)
+    ↓
+Data Cleaning & Validation
+    ↓
+Feature Engineering (14 derived metrics)
+    ↓
+Risk Scoring (5-component weighted model)
+    ↓
+IOC Detection & Alerting
+    ↓
+Outputs (6 analytical datasets)
+    ↓
+Dashboards (Streamlit + React)
+```
+
+---
+
+## 📁 Directory Structure
+
+```
+.
+├── src/                          # Core Python modules
+│   ├── cleaning.py              # Data loading & validation
+│   ├── features.py              # Feature engineering
+│   ├── pipeline.py              # Main orchestration
+│   ├── risk_scoring.py          # Risk calculation
+│   ├── ioc_detection.py         # Fraud pattern detection
+│   └── utils.py                 # Helper functions
+│
+├── dashboards/                   # Analysis interfaces
+│   ├── streamlit_app.py         # Interactive Streamlit dashboard
+│   └── tableau/                 # Tableau configuration
+│
+├── frontend/                     # React.js web interface
+│   ├── src/
+│   │   ├── App.tsx              # Main React component
+│   │   ├── lib/
+│   │   │   ├── data.ts          # Data loading utilities
+│   │   │   ├── geo.ts           # Geographic functions
+│   │   │   └── queryClient.ts   # API client
+│   │   └── ...
+│   ├── package.json             # Dependencies
+│   ├── vite.config.ts           # Build configuration
+│   └── tailwind.config.js       # CSS configuration
+│
+├── data/                         # Raw datasets
+│   ├── api_data_aadhar_enrolment/
+│   ├── api_data_aadhar_demographic/
+│   └── api_data_aadhar_biometric/
+│
+├── outputs/                      # Generated datasets
+│   ├── risk_scores.csv
+│   ├── alerts.csv
+│   ├── daily_summary.csv
+│   ├── district_summary.csv
+│   ├── state_summary.csv
+│   └── ioc_catalogue.csv
+│
+├── analysis.ipynb               # Statistical exploration notebook
+├── government_intelligence.ipynb # Main analysis & visualizations
+├── requirements.txt             # Python dependencies
+└── README.md                    # This file
+```
 
 ---
 
 ## 🚀 Quick Start
 
 ### Prerequisites
-
-- Python 3.10 or higher
-- pip package manager
+- Python 3.8+
+- Node.js 16+ (for frontend)
+- Git
 
 ### Installation
 
-```bash
-# Clone or navigate to the project directory
-cd "Aadhar hackathon"
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/Snikitha-V/SECURITY-ANALYTICS-ON-AADHAAR-ENROLMENT-DATA-TRENDS-RISKS-AND-SYSTEM-INSIGHTS.git
+   cd "Aadhar hackathon"
+   ```
 
-# Install dependencies
-pip install -r requirements.txt
+2. **Install Python dependencies**
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-# Run the analysis pipeline
-python src/pipeline.py
+3. **Run the main pipeline**
+   ```bash
+   python src/pipeline.py
+   ```
 
-# Launch the dashboard
-streamlit run dashboards/streamlit_app.py
-```
+4. **Launch Streamlit dashboard**
+   ```bash
+   streamlit run dashboards/streamlit_app.py
+   ```
 
-The dashboard will open at `http://localhost:8501`
-
----
-
-## 📁 Project Structure
-
-```
-project_root/
-├── data/
-│   ├── api_data_aadhar_enrolment/     # Enrollment CSVs
-│   ├── api_data_aadhar_demographic/   # Demographic update CSVs
-│   └── api_data_aadhar_biometric/     # Biometric update CSVs
-├── src/
-│   ├── cleaning.py                    # Data loading & preprocessing
-│   ├── features.py                    # Feature engineering
-│   ├── risk_scoring.py                # Risk score calculation
-│   ├── ioc_detection.py               # IOC pattern detection
-│   ├── utils.py                       # Helper functions
-│   └── pipeline.py                    # Main orchestration script
-├── dashboards/
-│   ├── streamlit_app.py               # Interactive SOC dashboard
-│   └── tableau/
-│       └── TABLEAU_SETUP.md           # Tableau configuration guide
-├── outputs/
-│   ├── risk_scores.csv                # PIN-level risk scores
-│   ├── ioc_catalogue.csv              # Detected IOCs
-│   ├── alerts.csv                     # Prioritized alerts
-│   ├── state_summary.csv              # State-level aggregations
-│   ├── district_summary.csv           # District-level aggregations
-│   └── daily_summary.csv              # Time-series data
-├── claude.md                          # System specification
-├── dashboard.md                       # Dashboard specification
-└── README.md                          # This file
-```
+5. **Run the analysis notebook**
+   ```bash
+   jupyter notebook government_intelligence.ipynb
+   ```
 
 ---
 
-## 📊 Risk Scoring Model
+## 📊 Output Datasets
 
-### Composite Risk Score Formula
+| File | Records | Purpose |
+|------|---------|---------|
+| `risk_scores.csv` | 32,894 PINs | PIN-level risk assessment |
+| `alerts.csv` | 4,079 alerts | High-priority investigation cases |
+| `daily_summary.csv` | 115 days | Time-series trend analysis |
+| `district_summary.csv` | 1,094 districts | Geographic rollup |
+| `state_summary.csv` | 59 states | Executive dashboard |
+| `ioc_catalogue.csv` | 49,787 IOCs | Fraud pattern indicators |
 
-```
-Risk_Score = 
-    (Enrollment_Velocity × 0.30) +
-    (Update_Velocity × 0.25) +
-    (Demographic_Anomaly × 0.20) +
-    (Geographic_Outlier × 0.15) +
-    (Temporal_Spike × 0.10)
-```
+---
+
+## 🎯 Risk Scoring Model
+
+### Components (0-10 scale)
+1. **Enrollment Velocity** (30%): Enrollments relative to national median
+2. **Update Velocity** (25%): Demographic/biometric updates frequency
+3. **Demographic Anomaly** (20%): Z-score based outlier detection
+4. **Geographic Outlier** (15%): Deviation from district norms
+5. **Temporal Spike** (10%): Sudden activity changes
 
 ### Risk Categories
-
-| Level | Score Range | Action Required |
-|-------|-------------|-----------------|
+| Category | Score | Action |
+|----------|-------|--------|
 | **CRITICAL** | ≥ 8.0 | Immediate investigation |
 | **HIGH** | 6.0 - 7.99 | Priority review within 48 hours |
-| **MEDIUM** | 4.0 - 5.99 | Add to monitoring queue |
-| **LOW** | < 4.0 | Normal activity |
+| **MEDIUM** | 4.0 - 5.99 | Scheduled audit |
+| **LOW** | < 4.0 | Routine monitoring |
 
 ---
 
-## 🚨 IOC Detection Patterns
+## 🔍 Fraud Indicators Detected
 
-| Pattern | Code | Trigger Condition |
-|---------|------|-------------------|
-| Mass Enrollment Spike | MES | >400% increase in <7 days |
-| Demographic Surge | DMS | >3× median updates |
-| Biometric Churn | BIO | >30% recapture ratio |
-| Child Ratio Anomaly | CRA | Z-score > 3 |
-| Coordinated PIN Spike | CPS | High activity across all metrics |
+The system detects 8 fraud patterns (IOCs):
 
----
-
-## 🖥️ Dashboard Pages
-
-1. **Overview** - Executive KPIs and risk distribution
-2. **Threat Map** - Geographic risk visualization
-3. **PIN Risk Explorer** - Deep-dive investigation mode
-4. **Temporal Analysis** - Time-series patterns
-5. **IOC Catalogue** - Threat intelligence library
-6. **Data Health** - Quality metrics and validation
-7. **Methodology** - Technical documentation
+1. **Mass Enrollment Spike (MES)**: >400% increase in <7 days
+2. **Demographic Surge (DMS)**: >3× median updates
+3. **Biometric Churn (BIO)**: >30% recapture ratio
+4. **Child Ratio Anomaly (CRA)**: Z-score > 3 in child enrollments
+5. **Coordinated PIN Spike (CPS)**: Simultaneous activity spikes
+6. **Ghost Enrollment (GHE)**: Suspicious elderly activity
+7. **Operator Collusion (OPC)**: Extreme volume from single PIN
+8. **Multi-PIN Synchronization (MPS)**: District-wide coordination
 
 ---
 
-## 🔧 Configuration
+## 📈 Key Features
 
-### Environment Variables (Optional)
+### Data Processing
+- ✅ Chunked CSV loading (5M+ records)
+- ✅ Automated schema standardization
+- ✅ Pincode validation (6-digit regex)
+- ✅ Date parsing and cleaning
+- ✅ Missing value imputation
 
-```bash
-export ASOC_DATA_DIR="/path/to/data"
-export ASOC_OUTPUT_DIR="/path/to/outputs"
+### Feature Engineering
+- ✅ 14 derived metrics
+- ✅ Velocity calculations
+- ✅ Z-score anomaly detection
+- ✅ Geographic profiling
+- ✅ Temporal analysis
+
+### Outputs
+- ✅ Risk scores at multiple aggregation levels
+- ✅ Detailed IOC catalogue
+- ✅ Investigation-ready alerts
+- ✅ Time-series trends
+- ✅ Geographic heatmaps
+
+### Visualizations
+- ✅ Interactive Streamlit dashboard
+- ✅ React.js web interface
+- ✅ Tableau integration
+- ✅ Geographic risk heatmaps
+- ✅ Temporal trend analysis
+
+---
+
+## 🔧 Technology Stack
+
+**Backend**
+- Python 3.8+
+- Pandas, NumPy, SciPy
+- Scikit-learn
+
+**Frontend**
+- React.js with TypeScript
+- Vite (build tool)
+- Tailwind CSS
+- Leaflet (maps)
+
+**Dashboards**
+- Streamlit
+- Tableau
+
+**Data Processing**
+- Pandas (data manipulation)
+- NumPy (numerical computing)
+- SciPy (statistical functions)
+
+---
+
+## 📊 Analysis Notebooks
+
+### `government_intelligence.ipynb` (46 cells)
+Main analysis notebook featuring:
+- Data exploration and profiling
+- Risk score distribution analysis
+- Geographic hotspot identification
+- Temporal trend analysis
+- Component comparison and attribution
+- Multi-factor risk interactions
+- Resource allocation recommendations
+
+### `analysis.ipynb`
+Supplementary statistical analysis and testing
+
+---
+
+## 🏗️ Pipeline Execution
+
+The main pipeline (`src/pipeline.py`) executes in sequence:
+
+```
+1. Load & Clean Data      → 5M records validated
+2. Merge Datasets         → Multiple aggregation levels
+3. Engineer Features      → 14 derived metrics
+4. Calculate Risk Scores  → Composite scoring model
+5. Detect IOCs            → 8 fraud patterns
+6. Generate Outputs       → 6 CSV files
+7. Create Summaries       → Aggregated views
 ```
 
-### Random Seed
+---
 
-All random operations use seed `42` for reproducibility:
+## 🔐 Data Security & Reproducibility
+
+- **Deterministic Processing**: Fixed random seed (42) for reproducibility
+- **No Machine Learning**: Rule-based detection for explainability
+- **Percentile Capping**: 99th percentile normalization prevents outlier distortion
+- **Schema Validation**: All inputs validated against specification
+
+---
+
+## 📝 Configuration & Customization
+
+Key parameters in source files:
+
+**Risk Thresholds** (`src/risk_scoring.py`):
 ```python
-np.random.seed(42)
+RISK_THRESHOLDS = {
+    'CRITICAL': 8.0,
+    'HIGH': 6.0,
+    'MEDIUM': 4.0,
+}
 ```
 
----
-
-## 📈 Output Files
-
-### risk_scores.csv
-PIN-level risk assessment with all features and scores.
-
-| Column | Description |
-|--------|-------------|
-| pincode | 6-digit PIN code |
-| state | State name |
-| district | District name |
-| risk_score | Composite score (0-10) |
-| risk_level | CRITICAL/HIGH/MEDIUM/LOW |
-| risk_factors | Top contributing factors |
-
-### ioc_catalogue.csv
-Detected Indicators of Compromise.
-
-| Column | Description |
-|--------|-------------|
-| ioc_id | Unique identifier |
-| pattern_name | Type of IOC detected |
-| description | Detailed finding |
-| recommended_action | Investigation guidance |
-
-### alerts.csv
-Prioritized alert queue for SOC analysts.
-
----
-
-## 🔐 Data Integrity
-
-This system follows strict rules:
-
-- ✅ Uses **only** the three UIDAI datasets
-- ❌ No external data sources
-- ❌ No synthetic data generation
-- ❌ No machine learning predictions
-- ✅ All metrics are derived and explainable
-- ✅ Deterministic output (same input → same output)
-
----
-
-## 📋 Validation Checklist
-
-- [x] Uses only 3 datasets (enrollment, demographic, biometric)
-- [x] No external data enrichment
-- [x] Risk scores are reproducible
-- [x] IOC catalogue generated with actionable findings
-- [x] Dashboard runs completely offline
-- [x] All outputs are explainable
-
----
-
-## 🛠️ Troubleshooting
-
-### Pipeline fails to load data
-```bash
-# Check data directory structure
-ls -la data/api_data_aadhar_*
-```
-
-### Dashboard shows no data
-```bash
-# Run the pipeline first
-python src/pipeline.py
-
-# Then launch dashboard
-streamlit run dashboards/streamlit_app.py
-```
-
-### Memory issues with large datasets
+**IOC Patterns** (`src/ioc_detection.py`):
 ```python
-# Use chunked processing in cleaning.py
-# Already implemented with glob pattern loading
+IOC_PATTERNS = {
+    'MES': {'threshold': 4.0, 'window_days': 7},
+    'DMS': {'threshold': 3.0},
+    'BIO': {'threshold': 0.30},
+    # ... more patterns
+}
 ```
 
 ---
 
-## 📖 Methodology
+## 📞 Support & Documentation
 
-This system implements **rule-based anomaly detection** rather than machine learning because:
-
-1. **Explainability**: Every score traces to specific data points
-2. **Auditability**: Fixed, documented rules
-3. **No Training Data**: No labeled fraud cases available
-4. **Transparency**: Investigators can challenge findings
-5. **Reproducibility**: Deterministic with seed=42
-
-For detailed methodology, see the **Methodology** page in the dashboard.
+- **Data Pipeline**: See [DATA_README.md](DATA_README.md) for dataset descriptions
+- **Methodology**: See [METHODOLOGY.md](METHODOLOGY.md) for technical approach
+- **Specification**: See `claude.md` for system requirements
 
 ---
 
 ## 📄 License
 
-MIT License - See LICENSE file for details.
+[Specify your license here]
 
 ---
 
-## 🤝 Contributing
+## 👥 Contributors
 
-This is a demonstration project for the Aadhaar Hackathon.
-
----
-
-## 📞 Support
-
-For questions about the methodology or implementation, refer to:
-- `claude.md` - System specification
-- `dashboard.md` - Dashboard requirements
-- Dashboard Methodology page - Technical documentation
+- **Project Team**: Aadhaar Security Operations Center
+- **Data Source**: Official Aadhaar enrollment, demographic, and biometric records
 
 ---
 
-<p align="center">
-  <strong>Built for the Aadhaar Hackathon 2025</strong><br>
-  A-SOC: Protecting India's Digital Identity Infrastructure
-</p>
+## 🎓 Citation
+
+If you use this system in research, please cite:
+
+```
+A-SOC: Aadhaar Security Operations Center
+Fraud Detection and Threat Intelligence System
+[Your Institution], 2024
+```
+
+---
+
+**Last Updated**: January 2026  
+**Version**: 1.0  
+**Status**: Production Ready
