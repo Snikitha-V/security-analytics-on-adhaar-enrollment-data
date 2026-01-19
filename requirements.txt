@@ -1,0 +1,23 @@
+# A-SOC Dependencies
+# Aadhaar Security Operations Center - Threat Intelligence System
+
+# Core Data Processing
+pandas>=2.0.0
+numpy>=1.24.0
+
+# Statistical Analysis
+scipy>=1.11.0
+scikit-learn>=1.3.0
+
+# Visualization
+plotly>=5.18.0
+
+# Dashboard
+streamlit>=1.29.0
+streamlit-option-menu>=0.3.6
+
+# Utilities
+pathlib2>=2.3.7;python_version<"3.4"
+
+# Note: No external APIs, no cloud dependencies
+# This project runs 100% offline
