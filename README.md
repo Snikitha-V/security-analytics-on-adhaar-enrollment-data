@@ -227,17 +227,7 @@ plt.show()
 ## 📄 License
 
 This project is for educational and research purposes.
+    
 
----
-
-## 👤 Author
-
-**Akhilucky**  
-GitHub: [@Akhilucky](https://github.com/Akhilucky)
-
----
-
-## 🙏 Acknowledgments
-
-- Aadhaar data sourced from official government APIs
+---nt APIs
 - Analysis methodology based on fraud detection best practices
