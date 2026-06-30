@@ -228,6 +228,3 @@ plt.show()
 
 This project is for educational and research purposes.
     
-
----nt APIs
-- Analysis methodology based on fraud detection best practices
